@@ -131,6 +131,8 @@ async def rebuild_cache():
     state = load_state()
     source_groups = state.get("source_groups", [])
 
+    print(f"🔧 Rebuild cache: {len(source_groups)} ta configured guruh")
+
     # Cache'ni tozalash
     source_groups_cache = {"fast": {}, "normal": {}}
 
@@ -143,6 +145,8 @@ async def rebuild_cache():
             group_type = "normal"
 
         try:
+            print(f"   💾 Yuklanmoqda: {group_id} ({group_type})...")
+
             # Guruhni olish (Pyrogram)
             if group_id.isdigit() or (group_id.startswith('-') and group_id[1:].isdigit()):
                 chat = await app.get_chat(int(group_id))
@@ -160,6 +164,7 @@ async def rebuild_cache():
 
             # Cache'ga qo'shish
             source_groups_cache[group_type][chat_id] = group_info
+            print(f"   ✅ Yuklandi: {group_id} → chat_id={chat_id}")
 
             # ⚡ QOSIMCHA: FAST guruhlar uchun userlarni cache'ga yuklash
             if group_type == "fast":
@@ -394,20 +399,29 @@ async def setup_raw_handler():
     async def raw_message_handler(client, update, users, chats):
         """RAW xabarlarni real-time ushlash - PYROGRAM"""
         try:
+            # DEBUG: Raw update keldi
+            print(f"🔵 Raw update keldi: {type(update).__name__}")
+
             # Faqat yangi xabarlar
             if not isinstance(update, (UpdateNewMessage, UpdateNewChannelMessage)):
                 return
+
+            print(f"🟢 Yangi xabar update!")
 
             # Message obyektini olish
             message = None
             if hasattr(update, 'message') and isinstance(update.message, Message):
                 message = update.message
             else:
+                print(f"⚠️ Message obyekti topilmadi")
                 return
 
             # Xabar matni yo'q bo'lsa, o'tkazib yuborish
             if not message.message:
+                print(f"⚠️ Xabar matni yo'q (media/sticker/etc)")
                 return
+
+            print(f"📝 Xabar matni: {message.message[:50]}...")
 
             # Chat ID ni aniqlash
             peer = message.peer_id
@@ -416,7 +430,9 @@ async def setup_raw_handler():
                 # Pyrogram negativ ID ishlatadi
                 if chat_id > 0:
                     chat_id = int(f"-100{chat_id}")
+                print(f"📍 Chat ID: {chat_id}")
             else:
+                print(f"⚠️ PeerChannel emas: {type(peer).__name__}")
                 return
 
             # Cache'dan tekshirish - JUDA TEZ
@@ -426,38 +442,53 @@ async def setup_raw_handler():
             positive_id = abs(chat_id)
             negative_id = -abs(chat_id)
 
+            print(f"🔍 Cache tekshiruv: positive={positive_id}, negative={negative_id}")
+            print(f"   FAST cache: {list(source_groups_cache['fast'].keys())}")
+            print(f"   NORMAL cache: {list(source_groups_cache['normal'].keys())}")
+
             if positive_id in source_groups_cache["fast"] or negative_id in source_groups_cache["fast"]:
                 group_type = "fast"
                 chat_id = positive_id if positive_id in source_groups_cache["fast"] else negative_id
+                print(f"✅ FAST guruh topildi! chat_id={chat_id}")
             elif positive_id in source_groups_cache["normal"] or negative_id in source_groups_cache["normal"]:
                 group_type = "normal"
                 chat_id = positive_id if positive_id in source_groups_cache["normal"] else negative_id
+                print(f"✅ NORMAL guruh topildi! chat_id={chat_id}")
             else:
+                print(f"❌ Guruh cache'da yo'q. Skip.")
                 return  # Bu guruh bizning ro'yxatimizda yo'q
 
             # Kalit so'zni tekshirish
             state = load_state()
             keywords = [kw.lower().strip() for kw in state.get("keywords", [])]
 
+            print(f"🔑 Keywords soni: {len(keywords)}")
+
             if not keywords:
+                print(f"⚠️ Keywords yo'q, skip")
                 return
 
             matched_keyword = check_keyword_match(message.message, keywords)
             if not matched_keyword:
+                print(f"❌ Keyword match yo'q")
                 return
+
+            print(f"🎯 Keyword match: '{matched_keyword}'")
 
             # ⚠️ BLACKWORD TEKSHIRUVI
             blackwords = [bw.lower().strip() for bw in state.get("blackwords", [])]
             if blackwords:
+                print(f"🚫 Blackwords tekshirilmoqda ({len(blackwords)} ta)...")
                 found_blackword = check_blackword(message.message, blackwords)
                 if found_blackword:
                     print(f"🚫 Blackword topildi: '{found_blackword}' - xabar o'tkazib yuborildi")
                     return
 
-            print(f"🎯 Kalit so'z topildi: '{matched_keyword}' [{group_type.upper()}]")
+            print(f"✅ YUBORISH: '{matched_keyword}' [{group_type.upper()}]")
 
             # Chat username ni olish
             chat_username = source_groups_cache[group_type][chat_id].get("username")
+            print(f"📢 Chat: {chat_username or chat_id}")
 
             # ⚡ USERNAME yoki TELEFON ni tezkor topish
             user_identifier = None
@@ -469,11 +500,13 @@ async def setup_raw_handler():
                         phone_start = entity.offset
                         phone_length = entity.length
                         user_identifier = message.message[phone_start:phone_start + phone_length]
+                        print(f"📞 Telefon topildi: {user_identifier}")
                         break
 
             # 2. post_author (ba'zi guruhlar)
             if not user_identifier and hasattr(message, 'post_author') and message.post_author:
                 user_identifier = message.post_author
+                print(f"✍️ Post author: {user_identifier}")
 
             # 3. from_id dan username olishga harakat
             if not user_identifier and hasattr(message, 'from_id'):
@@ -483,15 +516,21 @@ async def setup_raw_handler():
                         user = users[message.from_id.user_id]
                         if hasattr(user, 'username') and user.username:
                             user_identifier = user.username
+                            print(f"👤 Username topildi: {user_identifier}")
                 except:
                     pass
+
+            if not user_identifier:
+                print(f"⚠️ User identifier topilmadi")
 
             # Guruh tipiga qarab ishlov berish
             if group_type == "fast":
                 # ⚡ FAST: DARHOL buffer ga yuborish
+                print(f"🚀 FAST mode: buffer'ga yuborish...")
                 asyncio.create_task(handle_fast_message(message, chat_id, chat_username, matched_keyword, user_identifier))
             else:
                 # 📝 NORMAL: oddiy jarayon
+                print(f"📝 NORMAL mode: formatlab yuborish...")
                 asyncio.create_task(handle_normal_message(message, chat_id, chat_username, matched_keyword))
 
         except Exception as e:

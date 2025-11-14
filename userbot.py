@@ -1,8 +1,9 @@
 import re
 import asyncio
 from datetime import datetime
-from telethon import TelegramClient, events
-from telethon.tl.types import (
+from pyrogram import Client, filters
+from pyrogram.raw import types, functions
+from pyrogram.raw.types import (
     UpdateNewMessage,
     UpdateNewChannelMessage,
     PeerChannel,
@@ -22,9 +23,14 @@ except ImportError:
 # API credentials
 api_id = 35590072
 api_hash = "48e5dad8bef68a54aac5b2ce0702b82c"
-session_path = "userbot_session"
 
-client = TelegramClient(session_path, api_id, api_hash)
+# ⚡ PYROGRAM CLIENT - TEZROQ VA ZAMONAVIY
+app = Client(
+    "pyrogram_session",
+    api_id=api_id,
+    api_hash=api_hash
+)
+
 handler_registered = False
 
 # ⚡ CACHE: Tezlik uchun source guruhlarni xotirada saqlash
@@ -59,9 +65,9 @@ def check_blackword(text, blackwords):
     """Qora ro'yxat so'zlarini tekshirish"""
     if not text or not blackwords:
         return None
-    
+
     text_lower = text.lower()
-    
+
     # Qora ro'yxat so'zlarini tekshirish
     for bw in blackwords:
         if ' ' in bw:
@@ -73,62 +79,30 @@ def check_blackword(text, blackwords):
             words = set(re.findall(r'\b\w+\b', text_lower))
             if bw in words:
                 return bw
-    
+
     return None
 
 
-def get_quick_user_info(message):
+async def get_sender_details(chat_id, user_id):
     """
-    ⚡ TEZKOR user ma'lumotlarini olish - faqat message obyektidan
-    ASYNC emas - xabar o'chib ketgunga qadar tezkor ishlaydi
-    """
-    try:
-        # User ID
-        user_id = message.sender_id
-        
-        # Username ni topishga harakat (turli maydonlardan)
-        username = None
-        
-        # 1. message.from_id dan (agar mavjud bo'lsa)
-        if hasattr(message, 'from_id') and hasattr(message.from_id, 'user_id'):
-            user_id = message.from_id.user_id
-        
-        # 2. post_author maydoni (ba'zi guruhlar uchun)
-        if hasattr(message, 'post_author') and message.post_author:
-            username = message.post_author
-        
-        user_info = {
-            "name": "Noma'lum",
-            "username": username,
-            "phone": None,
-            "user_id": user_id
-        }
-        
-        return user_info
-    except Exception as e:
-        print(f"⚠️  Quick user info xatolik: {e}")
-        return None
-
-
-async def get_sender_details(message):
-    """
-    Sender ma'lumotlarini olish (async) - faqat NORMAL guruhlar uchun
-    Bu sekinroq, lekin to'liq ma'lumot beradi
+    Sender ma'lumotlarini olish (async) - NORMAL guruhlar uchun
+    Pyrogram orqali to'liq ma'lumot olish
     """
     try:
-        sender = await message.get_sender()
-        
-        # Agar sender None bo'lsa (xabar o'chirilgan)
-        if sender is None:
+        # Chat member ma'lumotlarini olish
+        member = await app.get_chat_member(chat_id, user_id)
+        user = member.user
+
+        if user is None:
             return None
-        
+
         user_info = {
-            "name": f"{getattr(sender, 'first_name', '')} {getattr(sender, 'last_name', '')}".strip(),
-            "username": f"@{sender.username}" if getattr(sender, 'username', None) else None,
-            "phone": getattr(sender, 'phone', None),
-            "user_id": sender.id
+            "name": f"{user.first_name or ''} {user.last_name or ''}".strip(),
+            "username": f"@{user.username}" if user.username else None,
+            "phone": user.phone_number if hasattr(user, 'phone_number') else None,
+            "user_id": user.id
         }
-        
+
         return user_info
     except Exception as e:
         print(f"⚠️  Sender details xatolik: {e}")
@@ -139,7 +113,6 @@ async def update_source_groups():
     """Source guruhlarni yangilash va cache'ga yuklash"""
     print("🔄 Source guruhlar yangilanmoqda...")
 
-    dialogs = await client.get_dialogs()
     state = load_state()
 
     # Target guruhlarni exclude qilish
@@ -151,18 +124,16 @@ async def update_source_groups():
     # Yangi struktura
     new_sources = []
 
-    for dialog in dialogs:
-        entity = dialog.entity
+    # Barcha dialoglarni olish
+    async for dialog in app.get_dialogs():
+        chat = dialog.chat
 
-        # Faqat guruhlar (supergroup/megagroup/gigagroup)
-        if not hasattr(entity, 'megagroup') and not getattr(entity, 'gigagroup', False):
+        # Faqat supergroup va group
+        if chat.type not in ["supergroup", "group"]:
             continue
 
-        if getattr(entity, 'broadcast', False):
-            continue
-
-        chat_id = str(entity.id)
-        username = getattr(entity, "username", None)
+        chat_id = str(chat.id)
+        username = chat.username
 
         # Target guruhlarda bo'lmasligi kerak
         if chat_id in exclude_targets or f"-100{chat_id}" in exclude_targets:
@@ -215,10 +186,14 @@ async def rebuild_cache():
             group_type = "normal"
 
         try:
-            # Guruhni olish
-            entity = await client.get_entity(group_id)
-            chat_id = entity.id
-            username = getattr(entity, 'username', None)
+            # Guruhni olish (Pyrogram)
+            if group_id.isdigit() or (group_id.startswith('-') and group_id[1:].isdigit()):
+                chat = await app.get_chat(int(group_id))
+            else:
+                chat = await app.get_chat(group_id)
+
+            chat_id = chat.id
+            username = chat.username
 
             group_info = {
                 "id": chat_id,
@@ -228,15 +203,16 @@ async def rebuild_cache():
 
             # Cache'ga qo'shish
             source_groups_cache[group_type][chat_id] = group_info
-            
+
             # ⚡ QOSIMCHA: FAST guruhlar uchun userlarni cache'ga yuklash
             if group_type == "fast":
                 try:
                     print(f"📥 {group_id} guruhidan userlarni cache'ga yuklash...")
-                    # Oxirgi 100 ta xabarni olish (userlar cache'ga tushadi)
-                    async for message in client.iter_messages(entity, limit=100):
-                        pass  # Faqat iterate qilish - cache'ga tushadigan userlar
-                    print(f"✅ {group_id} cache'ga yuklandi")
+                    # Oxirgi 100 ta xabarni olish (Pyrogram cache'ga yuklaydi)
+                    count = 0
+                    async for message in app.get_chat_history(chat_id, limit=100):
+                        count += 1
+                    print(f"✅ {group_id} cache'ga yuklandi ({count} xabar)")
                 except Exception as e:
                     print(f"⚠️ Cache yuklash xatolik {group_id}: {e}")
 
@@ -248,7 +224,7 @@ async def rebuild_cache():
     print(f"📦 Cache: {fast_count} ta fast, {normal_count} ta normal guruh")
 
 
-async def handle_fast_message(message, chat, matched_keyword, user_identifier=None):
+async def handle_fast_message(message, chat_id, chat_username, matched_keyword, user_identifier=None):
     """
     ⚡ FAST guruhlar uchun - FAQAT RAW MESSAGE
     user_identifier = username yoki telefon raqami
@@ -260,11 +236,17 @@ async def handle_fast_message(message, chat, matched_keyword, user_identifier=No
     # ⚡ DARHOL BUFFER GURUHGA YUBORISH
     if buffer_group:
         try:
-            buffer_id = int(buffer_group) if buffer_group.lstrip('-').isdigit() else buffer_group
-            
+            # Buffer ID ni olish
+            if buffer_group.lstrip('-').isdigit():
+                buffer_id = int(buffer_group)
+            elif buffer_group.startswith('https://t.me/+') or buffer_group.startswith('https://t.me/joinchat/'):
+                buffer_id = buffer_group
+            else:
+                buffer_id = buffer_group
+
             # TEZKOR yuborish
             message_text = message.message or "[Media/Sticker/File]"
-            
+
             # User identifier formatini yaratish
             if user_identifier:
                 if user_identifier.startswith('+'):
@@ -278,58 +260,47 @@ async def handle_fast_message(message, chat, matched_keyword, user_identifier=No
                     user_display = f"@{user_identifier}"
             else:
                 user_display = "❌ Topilmadi"
-            
+
             buffer_caption = (
                 f"💬 <b>Kontakt:</b> {user_display}\n\n"
                 f"📝 <b>Xabar:</b>\n{message_text}"
             )
-            
-            await client.send_message(
-                entity=buffer_id,
-                message=buffer_caption,
-                parse_mode='html',
-                link_preview=False
+
+            await app.send_message(
+                chat_id=buffer_id,
+                text=buffer_caption,
+                disable_web_page_preview=True
             )
             print(f"⚡ FAST → buffer: {user_display}")
-            
+
         except Exception as e:
             print(f"❌ Buffer xatolik: {e}")
 
     # Target guruhlarga yuborish
     if target_groups:
         asyncio.create_task(
-            send_to_targets_fast(message, chat, matched_keyword, target_groups, user_identifier)
+            send_to_targets_fast(message, chat_id, chat_username, matched_keyword, target_groups, user_identifier)
         )
 
 
-async def find_and_update_username(sent_msg, message, update, buffer_id):
-    """
-    ESKI FUNKSIYA - endi ishlatilmaydi
-    """
-    pass
-
-
-async def send_to_targets_fast(message, chat, matched_keyword, target_groups, user_identifier=None):
+async def send_to_targets_fast(message, chat_id, chat_username, matched_keyword, target_groups, user_identifier=None):
     """
     Target guruhlarga yuborish - FAST mode uchun
     """
     try:
         # RAW ma'lumotlar
-        user_id = message.sender_id
+        user_id = message.from_id.user_id if hasattr(message.from_id, 'user_id') else None
         message_text = message.message or "[Media/Sticker/File]"
-        timestamp = message.date.strftime('%d.%m.%Y %H:%M')
-        
-        # Guruh ma'lumotlari
-        chat_username = getattr(chat, 'username', None)
-        chat_id = str(chat.id)
-        
+        timestamp = datetime.fromtimestamp(message.date).strftime('%d.%m.%Y %H:%M')
+
         # Link yaratish
         if chat_username:
             message_link = f"https://t.me/{chat_username}/{message.id}"
         else:
-            pure_id = chat_id.removeprefix("-100")
+            # Private group uchun
+            pure_id = str(chat_id).removeprefix("-100")
             message_link = f"https://t.me/c/{pure_id}/{message.id}"
-        
+
         # User identifier formatini yaratish
         if user_identifier:
             if user_identifier.startswith('+'):
@@ -340,7 +311,7 @@ async def send_to_targets_fast(message, chat, matched_keyword, target_groups, us
                 user_display = f"@{user_identifier}"
         else:
             user_display = "❌ Topilmadi"
-        
+
         # Format
         caption = (
             f"⚡ <b>FAST Zakaz!</b>\n\n"
@@ -352,46 +323,45 @@ async def send_to_targets_fast(message, chat, matched_keyword, target_groups, us
             f"🆔 <b>User ID:</b> <code>{user_id}</code>\n\n"
             f"💬 <b>Xabar:</b>\n{message_text}"
         )
-        
+
         # Target guruhlarga yuborish
         for target in target_groups:
             try:
                 target_id = int(target) if isinstance(target, str) and target.lstrip('-').isdigit() else target
-                
-                await client.send_message(
-                    entity=target_id,
-                    message=caption,
-                    parse_mode='html',
-                    link_preview=False
+
+                await app.send_message(
+                    chat_id=target_id,
+                    text=caption,
+                    disable_web_page_preview=True
                 )
                 print(f"✅ Target → {target}")
-                
+
             except Exception as e:
                 print(f"❌ Target xatolik {target}: {e}")
-    
+
     except Exception as e:
         print(f"❌ send_to_targets_fast xatolik: {e}")
 
 
-async def handle_normal_message(message, chat, matched_keyword):
+async def handle_normal_message(message, chat_id, chat_username, matched_keyword):
     """
     📝 NORMAL guruhlar uchun - to'liq ma'lumot bilan
     """
     state = load_state()
     target_groups = state.get("target_groups", [])
 
-    await format_and_send_to_targets(message, chat, matched_keyword, target_groups, is_fast=False)
+    await format_and_send_to_targets(message, chat_id, chat_username, matched_keyword, target_groups, is_fast=False)
 
 
-async def format_and_send_to_targets(message, chat, matched_keyword, target_groups, is_fast=False):
+async def format_and_send_to_targets(message, chat_id, chat_username, matched_keyword, target_groups, is_fast=False):
     """Xabarni formatlab target guruhlarga yuborish"""
     try:
         # User ID ni darhol olish (message dan)
-        user_id = message.sender_id
-        
+        user_id = message.from_id.user_id if hasattr(message.from_id, 'user_id') else None
+
         # Foydalanuvchi ma'lumotlarini olishga harakat (sekinroq)
-        user_info = await get_sender_details(message)
-        
+        user_info = await get_sender_details(chat_id, user_id) if user_id else None
+
         if user_info and user_info.get('user_id'):
             # To'liq ma'lumot olingan
             sender_name = user_info['name'] or "Noma'lum"
@@ -403,18 +373,14 @@ async def format_and_send_to_targets(message, chat, matched_keyword, target_grou
             sender_name = "❌ Xabar o'chirilgan"
             sender_username = "❌ Yo'q"
             sender_phone = "❌ Yo'q"
-        
-        timestamp = message.date.strftime('%d.%m.%Y %H:%M')
 
-        # Guruh ma'lumotlari
-        chat_username = getattr(chat, 'username', None)
-        chat_id = str(chat.id)
+        timestamp = datetime.fromtimestamp(message.date).strftime('%d.%m.%Y %H:%M')
 
         # Link yaratish
         if chat_username:
             message_link = f"https://t.me/{chat_username}/{message.id}"
         else:
-            pure_id = chat_id.removeprefix("-100")
+            pure_id = str(chat_id).removeprefix("-100")
             message_link = f"https://t.me/c/{pure_id}/{message.id}"
 
         # Xabar matni
@@ -440,11 +406,10 @@ async def format_and_send_to_targets(message, chat, matched_keyword, target_grou
             try:
                 target_id = int(target) if isinstance(target, str) and target.lstrip('-').isdigit() else target
 
-                await client.send_message(
-                    entity=target_id,
-                    message=caption,
-                    parse_mode='html',
-                    link_preview=False
+                await app.send_message(
+                    chat_id=target_id,
+                    text=caption,
+                    disable_web_page_preview=True
                 )
                 print(f"✅ Yuborildi → {target}")
 
@@ -457,7 +422,7 @@ async def format_and_send_to_targets(message, chat, matched_keyword, target_grou
 
 async def setup_raw_handler():
     """
-    ⚡ RAW EVENT HANDLER - MAKSIMAL TEZLIK
+    ⚡ RAW EVENT HANDLER - MAKSIMAL TEZLIK (Pyrogram)
     UpdateNewMessage va UpdateNewChannelMessage ni bevosita ushlash
     """
     global handler_registered
@@ -468,10 +433,14 @@ async def setup_raw_handler():
     print("⚡ Raw handler sozlanmoqda...")
     await update_source_groups()
 
-    @client.on(events.Raw(types=[UpdateNewMessage, UpdateNewChannelMessage]))
-    async def raw_message_handler(update):
-        """RAW xabarlarni real-time ushlash"""
+    @app.on_raw_update()
+    async def raw_message_handler(client, update, users, chats):
+        """RAW xabarlarni real-time ushlash - PYROGRAM"""
         try:
+            # Faqat yangi xabarlar
+            if not isinstance(update, (UpdateNewMessage, UpdateNewChannelMessage)):
+                return
+
             # Message obyektini olish
             message = None
             if hasattr(update, 'message') and isinstance(update.message, Message):
@@ -487,16 +456,25 @@ async def setup_raw_handler():
             peer = message.peer_id
             if isinstance(peer, PeerChannel):
                 chat_id = peer.channel_id
+                # Pyrogram negativ ID ishlatadi
+                if chat_id > 0:
+                    chat_id = int(f"-100{chat_id}")
             else:
                 return
 
             # Cache'dan tekshirish - JUDA TEZ
             group_type = None
 
-            if chat_id in source_groups_cache["fast"]:
+            # Cache'da pozitiv ID va negativ ID ikkalasini ham tekshirish
+            positive_id = abs(chat_id)
+            negative_id = -abs(chat_id)
+
+            if positive_id in source_groups_cache["fast"] or negative_id in source_groups_cache["fast"]:
                 group_type = "fast"
-            elif chat_id in source_groups_cache["normal"]:
+                chat_id = positive_id if positive_id in source_groups_cache["fast"] else negative_id
+            elif positive_id in source_groups_cache["normal"] or negative_id in source_groups_cache["normal"]:
                 group_type = "normal"
+                chat_id = positive_id if positive_id in source_groups_cache["normal"] else negative_id
             else:
                 return  # Bu guruh bizning ro'yxatimizda yo'q
 
@@ -511,7 +489,7 @@ async def setup_raw_handler():
             if not matched_keyword:
                 return
 
-            # ⚠️ BLACKWORD TEKSHIRUVI - agar topilsa, xabarni o'tkazib yuborish
+            # ⚠️ BLACKWORD TEKSHIRUVI
             blackwords = [bw.lower().strip() for bw in state.get("blackwords", [])]
             if blackwords:
                 found_blackword = check_blackword(message.message, blackwords)
@@ -521,64 +499,64 @@ async def setup_raw_handler():
 
             print(f"🎯 Kalit so'z topildi: '{matched_keyword}' [{group_type.upper()}]")
 
-            # Chat entitysini olish
-            chat = await client.get_entity(chat_id)
+            # Chat username ni olish
+            chat_username = source_groups_cache[group_type][chat_id].get("username")
 
             # ⚡ USERNAME yoki TELEFON ni tezkor topish
             user_identifier = None
-            
+
             # 1. Telefon raqami (entities'dan - eng ishonchli)
             if hasattr(message, 'entities') and message.entities:
-                from telethon.tl.types import MessageEntityPhone
                 for entity in message.entities:
                     if isinstance(entity, MessageEntityPhone):
                         phone_start = entity.offset
                         phone_length = entity.length
                         user_identifier = message.message[phone_start:phone_start + phone_length]
                         break
-            
+
             # 2. post_author (ba'zi guruhlar)
             if not user_identifier and hasattr(message, 'post_author') and message.post_author:
                 user_identifier = message.post_author
-            
-            # 3. Cache'dan username olishga harakat (agar telefon yo'q bo'lsa)
-            if not user_identifier:
+
+            # 3. from_id dan username olishga harakat
+            if not user_identifier and hasattr(message, 'from_id'):
                 try:
-                    # Telethon cache'da user bor bo'lsa, tez oladi
-                    sender = client._entity_cache.get(message.sender_id)
-                    if sender and hasattr(sender, 'username') and sender.username:
-                        user_identifier = sender.username
+                    # users dict'dan topish (Pyrogram raw update'da users keladi)
+                    if hasattr(message.from_id, 'user_id') and message.from_id.user_id in users:
+                        user = users[message.from_id.user_id]
+                        if hasattr(user, 'username') and user.username:
+                            user_identifier = user.username
                 except:
-                    pass  # Cache'da yo'q bo'lsa, o'tkazib yuborish
+                    pass
 
             # Guruh tipiga qarab ishlov berish
             if group_type == "fast":
                 # ⚡ FAST: DARHOL buffer ga yuborish
-                asyncio.create_task(handle_fast_message(message, chat, matched_keyword, user_identifier))
+                asyncio.create_task(handle_fast_message(message, chat_id, chat_username, matched_keyword, user_identifier))
             else:
                 # 📝 NORMAL: oddiy jarayon
-                asyncio.create_task(handle_normal_message(message, chat, matched_keyword))
+                asyncio.create_task(handle_normal_message(message, chat_id, chat_username, matched_keyword))
 
         except Exception as e:
             print(f"❌ Raw handler xatolik: {e}")
 
     handler_registered = True
-    print("✅ Raw handler yoqildi (maksimal tezlik)")
+    print("✅ Raw handler yoqildi (Pyrogram - maksimal tezlik)")
 
 
 async def run_userbot():
-    """Userbotni ishga tushirish"""
-    print("🚀 UserBot ishga tushmoqda...")
+    """Userbotni ishga tushirish - PYROGRAM"""
+    print("🚀 UserBot ishga tushmoqda (Pyrogram)...")
 
-    await client.start()
-    print("✅ UserBot ulandi")
+    await app.start()
+    print("✅ UserBot ulandi (Pyrogram)")
 
     # Raw handler'ni sozlash
     await setup_raw_handler()
 
     # Har 30 daqiqada yangilash
     while True:
-        await asyncio.sleep(1800)
+        await asyncio.sleep(1800)  # 30 daqiqa
         try:
             await update_source_groups()
         except Exception as e:

@@ -1,10 +1,24 @@
 services:
   - type: web
     name: toshkent-keyword-bot
-    env: python
     runtime: python
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: USERBOT_API_ID
+        sync: false
+      - key: USERBOT_API_HASH
+        sync: false
+      - key: ADMIN_BOT_TOKEN
+        sync: false
+      - key: CUSTOMER_BOT_TOKEN
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: TEST_GROUP_LINK
+        sync: false
+      - key: TEST_GROUP_ID
+        sync: false

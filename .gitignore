@@ -9,8 +9,9 @@ dist/
 build/
 
 # Telegram sessions
-*.session
-*.session-journal
+# Temporarily allow session files for deployment
+# *.session
+# *.session-journal
 !sessions/.gitkeep
 
 # Data files

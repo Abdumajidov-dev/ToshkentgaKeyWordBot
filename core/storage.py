@@ -1,7 +1,15 @@
 import json
 from pathlib import Path
+import os
 
-STATE_FILE = "bot_state.json"
+# Get project root directory
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+
+# Ensure data directory exists
+DATA_DIR.mkdir(exist_ok=True)
+
+STATE_FILE = str(DATA_DIR / "bot_state.json")
 
 def get_default_state():
     return {

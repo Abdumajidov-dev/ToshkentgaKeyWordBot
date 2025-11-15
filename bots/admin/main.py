@@ -6,10 +6,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.filters import Command
-from storage import load_state, save_state, get_items, add_item, get_default_state, remove_item
-
-BOT_TOKEN = "8250455047:AAHfUMysLqgaOmmhRob6cv7h0Y2uVhSnDgM"
-ADMIN_ID = 7106025530
+from core.storage import load_state, save_state, get_items, add_item, get_default_state, remove_item
+from core.config import ADMIN_BOT_TOKEN, ADMIN_IDS
 
 router = Router()
 ITEMS_PER_PAGE = 20
@@ -58,7 +56,7 @@ def section_keyboard(section: str):
 
 @router.message(Command("start"))
 async def start_handler(message: Message):
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         await message.answer("❌ Sizda huquq yo'q!")
         return
     
@@ -311,7 +309,7 @@ async def process_input(message: Message, state: FSMContext):
     await state.clear()
 
 async def run_admin_bot():
-    bot = Bot(token=BOT_TOKEN)
+    bot = Bot(token=ADMIN_BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(router)
     await dp.start_polling(bot)

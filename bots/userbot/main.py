@@ -349,14 +349,6 @@ async def send_to_targets_fast(message, chat, matched_keyword, target_groups, us
         # Guruh ma'lumotlari
         chat_username = getattr(chat, 'username', None)
         chat_title = getattr(chat, 'title', chat_username or 'Noma\'lum')
-        chat_id = str(chat.id)
-
-        # Link yaratish
-        if chat_username:
-            message_link = f"https://t.me/{chat_username}/{message.id}"
-        else:
-            pure_id = chat_id.removeprefix("-100")
-            message_link = f"https://t.me/c/{pure_id}/{message.id}"
 
         # User identifier formatini yaratish
         if user_identifier:
@@ -376,18 +368,20 @@ async def send_to_targets_fast(message, chat, matched_keyword, target_groups, us
             user_profile_link = f'<a href="tg://user?id={message.sender_id}">👤 Profilni ochish</a>'
 
         # [FAST] FAST Format - sodda va chiroyli
+        # FAST guruhda xabar o'chirilgani uchun faqat user profil linki
         caption = (
             f"⚡️ <b>FAST Guruh</b>\n\n"
             f"🔑 <b>Kalit so'z:</b> {matched_keyword}\n"
             f"📍 <b>Guruh:</b> {chat_title}\n"
             f"📞 <b>Kontakt:</b> {user_display}\n\n"
             f"💬 <b>Xabar:</b>\n{message_text}\n\n"
-            f"🔗 <a href='{message_link}'>Xabarni ko'rish</a>"
         )
 
-        # User profil linkini qo'shish (agar bor bo'lsa)
+        # User profil linkini qo'shish (ASOSIY!)
         if user_profile_link:
-            caption += f"\n{user_profile_link}"
+            caption += user_profile_link
+        else:
+            caption += "⚠️ User profili topilmadi"
         
         # Target guruhlarga yuborish
         for target in target_groups:

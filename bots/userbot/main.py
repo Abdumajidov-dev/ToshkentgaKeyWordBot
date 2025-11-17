@@ -302,15 +302,14 @@ async def handle_fast_message(message, chat, matched_keyword, user_identifier=No
             else:
                 user_display = "[X] Topilmadi"
 
-            # [YANGI] User profil linki yaratish
-            user_profile_link = ""
-            if message.sender_id:
-                user_profile_link = f'\n<a href="tg://user?id={message.sender_id}">👤 Profilni ochish</a>'
-
             buffer_caption = (
                 f"[XABAR] <b>Kontakt:</b> {user_display}\n\n"
-                f"[MATN] <b>Xabar:</b>\n{message_text}{user_profile_link}"
+                f"[MATN] <b>Xabar:</b>\n{message_text}\n\n"
             )
+
+            # [YANGI] User profil linki qo'shish
+            if message.sender_id:
+                buffer_caption += f'👤 <a href="tg://user?id={message.sender_id}">Profilni ochish</a>'
 
             await client.send_message(
                 entity=buffer_id,
@@ -361,12 +360,6 @@ async def send_to_targets_fast(message, chat, matched_keyword, target_groups, us
         else:
             user_display = "[X] Topilmadi"
 
-        # [YANGI] User profil linki yaratish - XABAR O'CHIRILSA HAM ISHLAYDI
-        user_profile_link = None
-        if message.sender_id:
-            # User ID bilan profil linki - har doim ishlaydi
-            user_profile_link = f'<a href="tg://user?id={message.sender_id}">👤 Profilni ochish</a>'
-
         # [FAST] FAST Format - sodda va chiroyli
         # FAST guruhda xabar o'chirilgani uchun faqat user profil linki
         caption = (
@@ -377,9 +370,10 @@ async def send_to_targets_fast(message, chat, matched_keyword, target_groups, us
             f"💬 <b>Xabar:</b>\n{message_text}\n\n"
         )
 
-        # User profil linkini qo'shish (ASOSIY!)
-        if user_profile_link:
-            caption += user_profile_link
+        # [YANGI] User profil linki qo'shish - INLINE MENTION
+        if message.sender_id:
+            # Telegram mention format - avtomatik clickable
+            caption += f'👤 <a href="tg://user?id={message.sender_id}">Profilni ochish</a>'
         else:
             caption += "⚠️ User profili topilmadi"
         
@@ -468,12 +462,6 @@ async def format_and_send_to_targets(message, chat, matched_keyword, target_grou
         else:
             contact_display = sender_name if sender_name != "[X] Xabar o'chirilgan" else "[X] Topilmadi"
 
-        # [YANGI] User profil linki yaratish - XABAR O'CHIRILSA HAM ISHLAYDI
-        user_profile_link = None
-        if message.sender_id:
-            # User ID bilan profil linki - har doim ishlaydi
-            user_profile_link = f'<a href="tg://user?id={message.sender_id}">👤 Profilni ochish</a>'
-
         # Format - sodda va chiroyli
         caption = (
             f"⚡️ <b>Yangi zakaz!</b>\n\n"
@@ -482,12 +470,12 @@ async def format_and_send_to_targets(message, chat, matched_keyword, target_grou
             f"📍 <b>Guruh:</b> {chat_title}\n"
             f"📞 <b>Kontakt:</b> {contact_display}\n\n"
             f"💬 <b>Xabar:</b>\n{message_text}\n\n"
-            f"🔗 <a href='{message_link}'>Xabarni ko'rish</a>"
+            f"🔗 <a href='{message_link}'>Xabarni ko'rish</a>\n"
         )
 
-        # User profil linkini qo'shish (agar bor bo'lsa)
-        if user_profile_link:
-            caption += f"\n{user_profile_link}"
+        # [YANGI] User profil linki qo'shish - INLINE MENTION
+        if message.sender_id:
+            caption += f'👤 <a href="tg://user?id={message.sender_id}">Profilni ochish</a>'
 
         # Target guruhlarga yuborish
         for target in target_groups:

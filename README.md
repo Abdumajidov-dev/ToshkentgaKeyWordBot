@@ -112,9 +112,16 @@ TEST_GROUP_LINK = "https://t.me/+A3DpeN93ohg3ODgy"
 
 ### 3. Ishga tushirish
 
-**Barcha 3 ta botni birga ishga tushirish:**
+**MUHIM:** Botlarni faqat loyiha root papkasidan ishga tushiring!
+
+**Usul 1: Barcha 3 ta botni birga (TAVSIYA ETILADI)**
 ```bash
+# Terminal/CMD orqali
+cd ToshkentgaKeyWordBot
 python main.py
+
+# Yoki Windows'da .bat fayl orqali
+run_all_bots.bat
 ```
 
 Ishga tushadi:
@@ -122,11 +129,28 @@ Ishga tushadi:
 - ✅ Admin Bot (Configuration panel)
 - ✅ Customer Bot (Payment & subscriptions)
 
-**Alohida bot ishga tushirish (debugging uchun):**
+**Usul 2: Alohida bot ishga tushirish (debugging uchun)**
 ```bash
-# Faqat Customer Bot
+# UserBot
+python -m bots.userbot.main
+
+# Admin Bot
+python -m bots.admin.main
+
+# Customer Bot
 python -m bots.customer.main
 ```
+
+**Usul 3: VSCode orqali (F5)**
+1. VSCode'da loyihani oching
+2. F5 bosing
+3. "Run All Bots" yoki "Run UserBot Only" tanlang
+
+**XATOLIK BO'LSA:**
+Agar `ModuleNotFoundError: No module named 'core'` xatolik chiqsa:
+- ❌ NOTO'G'RI: `python bots/userbot/main.py`
+- ✅ TO'G'RI: `python -m bots.userbot.main` (root papkadan)
+- ✅ TO'G'RI: `python main.py` (root papkadan)
 
 ---
 
@@ -261,6 +285,26 @@ python -m scripts.check_ban
 ```bash
 python -m scripts.test_connection
 ```
+
+**Target guruhlar huquqlarini tekshirish:**
+```bash
+python -m scripts.check_group_permissions
+```
+
+**Source guruh userlarini eksport qilish:**
+```bash
+python -m scripts.extract_users
+```
+Barcha source guruhlardan yoki bitta guruhdan userlarni JSON/CSV formatda eksport qiladi.
+
+**FAST guruhlar uchun user cache yaratish (ixtiyoriy):**
+```bash
+python -m scripts.cache_fast_users
+```
+⚠️ **OGOHLANTIRISH:** Bu script faqat UserBot **ishlamayotganda** ishlatiladi!
+- UserBot avtomatik ravishda cache yaratadi (startup + har 24 soatda)
+- Agar UserBot ishlasa, "database is locked" xatolik chiqadi
+- Faqat manual cache yaratish kerak bo'lsa ishlatiladi
 
 ---
 

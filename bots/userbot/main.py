@@ -11,6 +11,7 @@ from telethon.tl.types import (
 )
 from core.storage import save_state, load_state
 from core.config import USERBOT_API_ID, USERBOT_API_HASH, session_path
+from core.user_cache import get_user_display_info, add_user_to_cache
 
 # TEZLIK UCHUN: uvloop event loop (agar mavjud bo'lsa)
 try:
@@ -134,6 +135,22 @@ async def get_sender_details(message):
             "phone": f"+{phone}" if phone else None,
             "user_id": sender.id
         }
+
+        # [YANGI] User cache'ga qo'shish (kelajakda FAST guruhlarda ishlatish uchun)
+        try:
+            cache_data = {
+                'id': sender.id,
+                'first_name': first_name,
+                'last_name': last_name,
+                'full_name': full_name,
+                'username': f"@{username}" if username else None,
+                'phone': f"+{phone}" if phone else None,
+                'is_verified': getattr(sender, 'verified', False),
+                'is_premium': getattr(sender, 'premium', False),
+            }
+            add_user_to_cache(sender.id, cache_data)
+        except:
+            pass  # Cache xatoligi asosiy jarayonni to'xtatmasligi kerak
 
         return user_info
     except Exception as e:
@@ -284,12 +301,17 @@ async def handle_fast_message(message, chat, matched_keyword, user_identifier=No
                     user_display = f"@{user_identifier}"
             else:
                 user_display = "[X] Topilmadi"
-            
+
+            # [YANGI] User profil linki yaratish
+            user_profile_link = ""
+            if message.sender_id:
+                user_profile_link = f'\n<a href="tg://user?id={message.sender_id}">👤 Profilni ochish</a>'
+
             buffer_caption = (
                 f"[XABAR] <b>Kontakt:</b> {user_display}\n\n"
-                f"[MATN] <b>Xabar:</b>\n{message_text}"
+                f"[MATN] <b>Xabar:</b>\n{message_text}{user_profile_link}"
             )
-            
+
             await client.send_message(
                 entity=buffer_id,
                 message=buffer_caption,
@@ -347,21 +369,31 @@ async def send_to_targets_fast(message, chat, matched_keyword, target_groups, us
         else:
             user_display = "[X] Topilmadi"
 
+        # [YANGI] User profil linki yaratish - XABAR O'CHIRILSA HAM ISHLAYDI
+        user_profile_link = None
+        if message.sender_id:
+            # User ID bilan profil linki - har doim ishlaydi
+            user_profile_link = f'<a href="tg://user?id={message.sender_id}">👤 Profilni ochish</a>'
+
         # [FAST] FAST Format - sodda va chiroyli
         caption = (
-            f"[⚡️] <b>FAST Guruh</b>\n\n"
-            f"[🔑] <b>Kalit so'z:</b> {matched_keyword}\n"
-            f"[📍] <b>Guruh:</b> {chat_title}\n"
-            f"[XABAR] <b>Kontakt:</b> {user_display}\n\n"
-            f"[💬] <b>Xabar:</b>\n{message_text}\n\n"
-            f"[🔗] <a href='{message_link}'>Xabarni ko'rish</a>"
+            f"⚡️ <b>FAST Guruh</b>\n\n"
+            f"🔑 <b>Kalit so'z:</b> {matched_keyword}\n"
+            f"📍 <b>Guruh:</b> {chat_title}\n"
+            f"📞 <b>Kontakt:</b> {user_display}\n\n"
+            f"💬 <b>Xabar:</b>\n{message_text}\n\n"
+            f"🔗 <a href='{message_link}'>Xabarni ko'rish</a>"
         )
+
+        # User profil linkini qo'shish (agar bor bo'lsa)
+        if user_profile_link:
+            caption += f"\n{user_profile_link}"
         
         # Target guruhlarga yuborish
         for target in target_groups:
             try:
                 target_id = int(target) if isinstance(target, str) and target.lstrip('-').isdigit() else target
-                
+
                 await client.send_message(
                     entity=target_id,
                     message=caption,
@@ -369,9 +401,20 @@ async def send_to_targets_fast(message, chat, matched_keyword, target_groups, us
                     link_preview=False
                 )
                 print(f"[OK] Target → {target}")
-                
+
             except Exception as e:
-                print(f"[X] Target xatolik {target}: {e}")
+                error_msg = str(e)
+                if "can't write" in error_msg.lower() or "chat write forbidden" in error_msg.lower():
+                    print(f"[X] Target {target} yozish huquqi yo'q: {error_msg}")
+                    print(f"    YECHIM: UserBot'ni guruhga admin qiling yoki yozish huquqini bering")
+                elif "no user has" in error_msg.lower() or "user not participant" in error_msg.lower():
+                    print(f"[X] Target {target} UserBot a'zo emas: {error_msg}")
+                    print(f"    YECHIM: UserBot'ni guruhga qo'shing")
+                elif "flood" in error_msg.lower():
+                    print(f"[X] Target {target} FloodWait xatolik: {error_msg}")
+                    print(f"    YECHIM: Biroz kutib, qaytadan urinib ko'ring")
+                else:
+                    print(f"[X] Target xatolik {target}: {error_msg}")
     
     except Exception as e:
         print(f"[X] send_to_targets_fast xatolik: {e}")
@@ -431,16 +474,26 @@ async def format_and_send_to_targets(message, chat, matched_keyword, target_grou
         else:
             contact_display = sender_name if sender_name != "[X] Xabar o'chirilgan" else "[X] Topilmadi"
 
+        # [YANGI] User profil linki yaratish - XABAR O'CHIRILSA HAM ISHLAYDI
+        user_profile_link = None
+        if message.sender_id:
+            # User ID bilan profil linki - har doim ishlaydi
+            user_profile_link = f'<a href="tg://user?id={message.sender_id}">👤 Profilni ochish</a>'
+
         # Format - sodda va chiroyli
         caption = (
-            f"[MATN] <b>Yangi zakaz!</b>\n\n"
-            f"[KEY] <b>Kalit so'z:</b> {matched_keyword}\n"
-            f"[SANA] <b>Sana:</b> {timestamp}\n"
-            f"[GEO] <b>Guruh:</b> {chat_title}\n"
-            f"[XABAR] <b>Kontakt:</b> {contact_display}\n\n"
-            f"[MATN] <b>Xabar:</b>\n{message_text}\n\n"
-            f"[LINK] <a href='{message_link}'>Xabarni ko'rish</a>"
+            f"⚡️ <b>Yangi zakaz!</b>\n\n"
+            f"🔑 <b>Kalit so'z:</b> {matched_keyword}\n"
+            # f"[SANA] <b>Sana:</b> {timestamp}\n"
+            f"📍 <b>Guruh:</b> {chat_title}\n"
+            f"📞 <b>Kontakt:</b> {contact_display}\n\n"
+            f"💬 <b>Xabar:</b>\n{message_text}\n\n"
+            f"🔗 <a href='{message_link}'>Xabarni ko'rish</a>"
         )
+
+        # User profil linkini qo'shish (agar bor bo'lsa)
+        if user_profile_link:
+            caption += f"\n{user_profile_link}"
 
         # Target guruhlarga yuborish
         for target in target_groups:
@@ -456,7 +509,18 @@ async def format_and_send_to_targets(message, chat, matched_keyword, target_grou
                 print(f"[OK] Yuborildi → {target}")
 
             except Exception as e:
-                print(f"[X] Target xatolik {target}: {e}")
+                error_msg = str(e)
+                if "can't write" in error_msg.lower() or "chat write forbidden" in error_msg.lower():
+                    print(f"[X] Target {target} yozish huquqi yo'q: {error_msg}")
+                    print(f"    YECHIM: UserBot'ni guruhga admin qiling yoki yozish huquqini bering")
+                elif "no user has" in error_msg.lower() or "user not participant" in error_msg.lower():
+                    print(f"[X] Target {target} UserBot a'zo emas: {error_msg}")
+                    print(f"    YECHIM: UserBot'ni guruhga qo'shing")
+                elif "flood" in error_msg.lower():
+                    print(f"[X] Target {target} FloodWait xatolik: {error_msg}")
+                    print(f"    YECHIM: Biroz kutib, qaytadan urinib ko'ring")
+                else:
+                    print(f"[X] Target xatolik {target}: {error_msg}")
 
     except Exception as e:
         print(f"[X] Format xatolik: {e}")
@@ -533,7 +597,7 @@ async def setup_raw_handler():
 
             # [FAST] USERNAME yoki TELEFON ni tezkor topish
             user_identifier = None
-            
+
             # 1. Telefon raqami (entities'dan - eng ishonchli)
             if hasattr(message, 'entities') and message.entities:
                 from telethon.tl.types import MessageEntityPhone
@@ -543,12 +607,12 @@ async def setup_raw_handler():
                         phone_length = entity.length
                         user_identifier = message.message[phone_start:phone_start + phone_length]
                         break
-            
+
             # 2. post_author (ba'zi guruhlar)
             if not user_identifier and hasattr(message, 'post_author') and message.post_author:
                 user_identifier = message.post_author
-            
-            # 3. Cache'dan username olishga harakat (agar telefon yo'q bo'lsa)
+
+            # 3. Telethon cache'dan username olishga harakat
             if not user_identifier:
                 try:
                     # Telethon cache'da user bor bo'lsa, tez oladi
@@ -557,6 +621,35 @@ async def setup_raw_handler():
                         user_identifier = sender.username
                 except:
                     pass  # Cache'da yo'q bo'lsa, o'tkazib yuborish
+
+            # 4. [YANGI] User cache bazasidan topish (agar yuqoridagilar bo'lmasa)
+            if not user_identifier and message.sender_id:
+                cached_user = get_user_display_info(message.sender_id)
+                if cached_user:
+                    user_identifier = cached_user
+                    print(f"[CACHE] User bazadan topildi: {user_identifier}")
+
+            # [YANGI] Userni real-time cache'ga qo'shish (agar sender_id bor bo'lsa)
+            if message.sender_id and group_type == "fast":
+                try:
+                    # Faqat FAST guruhlar uchun - tezkor cache qo'shish
+                    # Agar sender ma'lumotlari olinsa, keyinroq to'liq cache'ga qo'shiladi
+                    from telethon.tl.types import User
+                    sender = client._entity_cache.get(message.sender_id)
+                    if sender and isinstance(sender, User):
+                        cache_data = {
+                            'id': sender.id,
+                            'first_name': getattr(sender, 'first_name', '') or '',
+                            'last_name': getattr(sender, 'last_name', '') or '',
+                            'full_name': f"{getattr(sender, 'first_name', '') or ''} {getattr(sender, 'last_name', '') or ''}".strip() or 'Noma\'lum',
+                            'username': f"@{sender.username}" if hasattr(sender, 'username') and sender.username else None,
+                            'phone': f"+{sender.phone}" if hasattr(sender, 'phone') and sender.phone else None,
+                            'is_verified': getattr(sender, 'verified', False),
+                            'is_premium': getattr(sender, 'premium', False),
+                        }
+                        add_user_to_cache(sender.id, cache_data)
+                except:
+                    pass  # Cache xatoligi asosiy jarayonni to'xtatmasin
 
             # Guruh tipiga qarab ishlov berish
             if group_type == "fast":
@@ -573,6 +666,127 @@ async def setup_raw_handler():
     print("[OK] Raw handler yoqildi (maksimal tezlik)")
 
 
+async def load_fast_users_cache():
+    """FAST guruhlardan userlarni cache'ga yuklash - UserBot client'ini ishlatadi"""
+    try:
+        from telethon.tl.functions.channels import GetParticipantsRequest
+        from telethon.tl.types import ChannelParticipantsSearch
+        from core.user_cache import add_users_bulk, get_cache_stats
+
+        print("\n" + "=" * 60)
+        print("FAST GURUHLAR USERLARINI CACHE'GA YUKLASH")
+        print("=" * 60)
+
+        # FAST guruhlarni olish
+        state = load_state()
+        source_groups = state.get("source_groups", [])
+
+        fast_groups = []
+        for group in source_groups:
+            if isinstance(group, dict):
+                if group.get("type") == "fast":
+                    fast_groups.append(group.get("id"))
+
+        if not fast_groups:
+            print("\n[INFO] FAST guruhlar topilmadi")
+            return
+
+        print(f"\n[INFO] {len(fast_groups)} ta FAST guruh topildi")
+        print("-" * 60)
+
+        all_users = {}
+
+        for i, group_id in enumerate(fast_groups, 1):
+            print(f"\n[{i}/{len(fast_groups)}] {group_id}")
+
+            try:
+                # Guruhni olish (mavjud client ishlatiladi)
+                entity = await client.get_entity(group_id)
+                group_title = getattr(entity, 'title', 'Noma\'lum')
+                print(f"  Nomi: {group_title}")
+
+                # Userlarni olish
+                offset = 0
+                batch_size = 200
+                group_user_count = 0
+
+                while True:
+                    try:
+                        participants = await client(GetParticipantsRequest(
+                            channel=entity,
+                            filter=ChannelParticipantsSearch(''),
+                            offset=offset,
+                            limit=batch_size,
+                            hash=0
+                        ))
+
+                        if not participants.users:
+                            break
+
+                        # Har bir userni qayta ishlash
+                        for user in participants.users:
+                            # Bot'larni o'tkazib yuborish
+                            if user.bot:
+                                continue
+
+                            user_id = str(user.id)
+
+                            user_data = {
+                                'id': user.id,
+                                'first_name': user.first_name or '',
+                                'last_name': user.last_name or '',
+                                'full_name': f"{user.first_name or ''} {user.last_name or ''}".strip() or 'Noma\'lum',
+                                'username': f"@{user.username}" if user.username else None,
+                                'phone': f"+{user.phone}" if user.phone else None,
+                                'is_verified': getattr(user, 'verified', False),
+                                'is_premium': getattr(user, 'premium', False),
+                            }
+
+                            all_users[user_id] = user_data
+                            group_user_count += 1
+
+                        # Keyingi batch
+                        offset += len(participants.users)
+
+                        if len(participants.users) < batch_size:
+                            break
+
+                    except Exception as e:
+                        print(f"  [OGOHLANTIRISH] Batch xatolik (offset={offset}): {e}")
+                        break
+
+                print(f"  ✓ {group_user_count} ta user cache'ga qo'shildi")
+
+            except Exception as e:
+                print(f"  [X] Guruh xatolik: {e}")
+
+            # Rate limiting
+            await asyncio.sleep(1)
+
+        # Barcha userlarni bir vaqtda saqlash
+        if all_users:
+            print(f"\n{'-' * 60}")
+            print(f"[SAQLASH] {len(all_users)} ta user cache'ga yozilmoqda...")
+            add_users_bulk(all_users)
+
+            # Statistika
+            stats = get_cache_stats()
+            print(f"\n{'=' * 60}")
+            print("CACHE STATISTIKASI")
+            print(f"{'=' * 60}")
+            print(f"Jami userlar: {stats['total']}")
+            print(f"Username bor: {stats['with_username']}")
+            print(f"Telefon bor: {stats['with_phone']}")
+            print(f"{'=' * 60}\n")
+        else:
+            print("\n[INFO] Cache'ga qo'shiladigan userlar topilmadi")
+
+    except Exception as e:
+        print(f"[OGOHLANTIRISH] User cache yuklash xatolik: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 async def run_userbot():
     """Userbotni ishga tushirish"""
     print("[START] UserBot ishga tushmoqda...")
@@ -583,10 +797,24 @@ async def run_userbot():
     # Raw handler'ni sozlash
     await setup_raw_handler()
 
-    # Har 30 daqiqada yangilash
+    # [YANGI] Startup'da FAST guruhlar cache'ni yuklash
+    asyncio.create_task(load_fast_users_cache())
+
+    # Har 30 daqiqada source guruhlar yangilash
+    # Har 24 soatda user cache yangilash
+    last_cache_update = 0
+
     while True:
-        await asyncio.sleep(1800)
+        await asyncio.sleep(1800)  # 30 daqiqa
         try:
             await update_source_groups()
+
+            # Har 24 soatda (48 ta 30-daqiqalik interval)
+            last_cache_update += 1
+            if last_cache_update >= 48:
+                print("\n[CACHE] 24 soat o'tdi, user cache yangilanmoqda...")
+                asyncio.create_task(load_fast_users_cache())
+                last_cache_update = 0
+
         except Exception as e:
             print(f"[X] Yangilash xatolik: {e}")

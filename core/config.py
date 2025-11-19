@@ -21,6 +21,9 @@ ADMIN_BOT_TOKEN = os.getenv("ADMIN_BOT_TOKEN", "8250455047:AAHfUMysLqgaOmmhRob6c
 # Customer Bot - Mijozlar va to'lovlar bilan ishlash
 CUSTOMER_BOT_TOKEN = os.getenv("CUSTOMER_BOT_TOKEN", "8383987517:AAGb68qvvOG04huoFOX6OmTteYOpkS7Clo0")
 
+# Duplicate Remover Bot - Takroriy habarlarni o'chirish
+DUPLICATE_REMOVER_TOKEN = os.getenv("DUPLICATE_REMOVER_TOKEN", "8148323755:AAHoHMGEQx8_DQwwwryJqce0GG8Hdo1tHHQ")
+
 # ============================================================
 # ADMIN IDS (@userinfobot dan ID olish mumkin)
 # ============================================================

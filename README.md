@@ -1,19 +1,20 @@
 # Toshkent Keyword Bot
 
-Professional 3-bot Telegram tizimi - Kalit so'zlarni kuzatish, Admin panel, Mijozlar boshqaruvi
+Professional 4-bot Telegram tizimi - Kalit so'zlarni kuzatish, Admin panel, Mijozlar boshqaruvi, Takroriy habarlarni o'chirish
 
 ---
 
 ## 📋 Umumiy Ma'lumot
 
-Ushbu loyiha 3 ta mustaqil bot orqali ishlaydi:
+Ushbu loyiha 4 ta mustaqil bot orqali ishlaydi:
 1. **UserBot** - Telegram guruhlaridagi kalit so'zlarni kuzatish
 2. **Admin Bot** - Kalit so'zlar va guruhlarni boshqarish
 3. **Customer Bot** - Mijozlar va to'lovlar bilan ishlash
+4. **Duplicate Remover Bot** - Target guruhlardagi takroriy habarlarni o'chirish
 
 ---
 
-## 🤖 3 Bot Tizimi
+## 🤖 4 Bot Tizimi
 
 ### 1️⃣ UserBot - Monitoring Bot
 **Vazifasi:** Guruhlardan kerakli xabarlarni topish va yuborish
@@ -74,6 +75,39 @@ python -m bots.customer.main
 
 ---
 
+### 4️⃣ Duplicate Remover Bot - Takroriy Habarlar Tozalagich
+**Vazifasi:** Target guruhlardagi bir xil habarlarni avtomatik o'chirish
+
+**Imkoniyatlari:**
+- 🔍 MD5 hash bilan duplicate aniqlash
+- 🗑 Avtomatik o'chirish - Birinchi xabar qoladi, keyingilari o'chiriladi
+- 🎯 Aqlli hashing - Text, caption va barcha media turlari (photo, video, document, audio, voice, sticker)
+- ⏰ 24 soatlik cache - Eski hashlar avtomatik o'chiriladi
+- 💾 Persistent storage - Bot qayta ishga tushirilganda cache saqlanadi
+- 📊 Statistika - Har bir guruh uchun o'chirilgan dublikatlar soni
+
+**Admin buyruqlari:**
+- `/start` - Bot haqida ma'lumot
+- `/stats` - Statistika ko'rish
+- `/clear` - Cache'ni tozalash
+- `/cleanup` - Eski hashlarni o'chirish (24+ soatlik)
+
+**Foydalanuvchilar:** Faqat `ADMIN_IDS` ro'yxatidagi adminlar
+
+**Ishga tushirish:**
+```bash
+python -m bots.duplicate_remover.main  # Alohida
+# yoki
+python main.py  # Barcha botlar bilan birga
+```
+
+**MUHIM:**
+- Bot target guruhlarda admin bo'lishi kerak
+- Faqat target guruhlarda ishlaydi (bot_state.json dan)
+- Xabarlarni o'chirish huquqi bo'lishi shart
+
+---
+
 ## 🚀 Tezkor Boshlash
 
 ### 1. Talab qilinadigan kutubxonalar
@@ -99,6 +133,7 @@ USERBOT_API_HASH = "your_api_hash"
 # Bot Tokenlar (BotFather dan)
 ADMIN_BOT_TOKEN = "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
 CUSTOMER_BOT_TOKEN = "0987654321:ZYXwvuTSRqpONMlkjIHGfedCBA"
+DUPLICATE_REMOVER_TOKEN = "1357924680:DEFghiJKLmnoPQRstuvWXYzabcDEFGHI"
 
 # Adminlar (@userinfobot dan ID oling)
 ADMIN_IDS = [
@@ -114,7 +149,7 @@ TEST_GROUP_LINK = "https://t.me/+A3DpeN93ohg3ODgy"
 
 **MUHIM:** Botlarni faqat loyiha root papkasidan ishga tushiring!
 
-**Usul 1: Barcha 3 ta botni birga (TAVSIYA ETILADI)**
+**Usul 1: Barcha 4 ta botni birga (TAVSIYA ETILADI)**
 ```bash
 # Terminal/CMD orqali
 cd ToshkentgaKeyWordBot
@@ -128,6 +163,7 @@ Ishga tushadi:
 - ✅ UserBot (Keyword monitoring)
 - ✅ Admin Bot (Configuration panel)
 - ✅ Customer Bot (Payment & subscriptions)
+- ✅ Duplicate Remover Bot (Duplicate message removal)
 
 **Usul 2: Alohida bot ishga tushirish (debugging uchun)**
 ```bash
@@ -136,6 +172,9 @@ python -m bots.userbot.main
 
 # Admin Bot
 python -m bots.admin.main
+
+# Duplicate Remover Bot
+python -m bots.duplicate_remover.main
 
 # Customer Bot
 python -m bots.customer.main

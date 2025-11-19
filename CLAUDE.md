@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A professional 3-bot Telegram system for keyword monitoring with payment subscription management. Designed for high-performance message capture (100-300ms response time) before admin bot deletions.
+A professional 4-bot Telegram system for keyword monitoring with payment subscription management and duplicate message removal. Designed for high-performance message capture (100-300ms response time) before admin bot deletions.
 
-**Three-bot architecture:**
+**Four-bot architecture:**
 1. **UserBot** ([bots/userbot/main.py](bots/userbot/main.py)): Telethon-based keyword monitor with FAST/NORMAL modes
 2. **Admin Bot** ([bots/admin/main.py](bots/admin/main.py)): Aiogram-based configuration panel for keywords, groups, and blackwords
 3. **Customer Bot** ([bots/customer/main.py](bots/customer/main.py)): Aiogram-based payment processing and user subscription management
+4. **Duplicate Remover Bot** ([bots/duplicate_remover/main.py](bots/duplicate_remover/main.py)): Aiogram-based duplicate message detector and remover for target groups
 
 **Operational modes:**
 - **FAST mode**: Groups with immediate message deletion (100-300ms via raw events + buffer forwarding)
@@ -26,9 +27,12 @@ ToshkentgaKeyWordBot/
 │   ├── admin/                # Configuration panel (Aiogram)
 │   │   ├── __init__.py
 │   │   └── main.py           # Admin Bot asosiy fayl
-│   └── customer/             # Payment & subscriptions (Aiogram)
+│   ├── customer/             # Payment & subscriptions (Aiogram)
+│   │   ├── __init__.py
+│   │   └── main.py           # Customer Bot asosiy fayl
+│   └── duplicate_remover/    # Duplicate message removal (Aiogram)
 │       ├── __init__.py
-│       └── main.py           # Customer Bot asosiy fayl
+│       └── main.py           # Duplicate Remover Bot asosiy fayl
 ├── core/                      # Asosiy funksionallik
 │   ├── __init__.py
 │   ├── config.py             # Konfiguratsiya
@@ -42,7 +46,8 @@ ToshkentgaKeyWordBot/
 │   ├── bot_state.json         # Keywords, source/target groups, blackwords
 │   ├── payment_requests.json  # To'lov so'rovlari (screenshot + status)
 │   ├── approved_users.json    # Tasdiqlangan foydalanuvchilar
-│   └── subscriptions.json     # Obuna narxlari
+│   ├── subscriptions.json     # Obuna narxlari
+│   └── duplicate_cache.json   # Takroriy habarlar cache (hash tracking)
 ├── sessions/                  # Telegram sessiyalari
 │   └── userbot_session.session
 ├── scripts/                   # Utility skriptlar
@@ -57,16 +62,19 @@ ToshkentgaKeyWordBot/
 
 ### Running Bots
 
-**All 3 bots together (recommended):**
+**All 4 bots together (recommended):**
 ```bash
 python main.py
 ```
-Ishga tushiradi: UserBot + Admin Bot + Customer Bot
+Ishga tushiradi: UserBot + Admin Bot + Customer Bot + Duplicate Remover Bot
 
 **Individual bots (debugging):**
 ```bash
 # Faqat Customer Bot
 python -m bots.customer.main
+
+# Faqat Duplicate Remover Bot
+python -m bots.duplicate_remover.main
 ```
 
 ### Background Services
@@ -89,10 +97,10 @@ pip install -r requirements.txt
 
 ## Architecture
 
-### Three-Bot System
+### Four-Bot System
 
-**[main.py](main.py)** - Entry point for all 3 bots:
-- Launches UserBot + Admin Bot + Customer Bot concurrently with `asyncio.gather()`
+**[main.py](main.py)** - Entry point for all 4 bots:
+- Launches UserBot + Admin Bot + Customer Bot + Duplicate Remover Bot concurrently with `asyncio.gather()`
 - All bots share the same asyncio event loop
 
 **Bot 1: [bots/userbot/main.py](bots/userbot/main.py)** - Telethon keyword monitor:
@@ -124,6 +132,17 @@ pip install -r requirements.txt
 - **Data Files**: payment_requests.json, approved_users.json, subscriptions.json
 - **Test Group Integration**: `TEST_GROUP_ID` and `TEST_GROUP_LINK` for approved user group management
 
+**Bot 4: [bots/duplicate_remover/main.py](bots/duplicate_remover/main.py)** - Aiogram duplicate message remover:
+- **Message Hash System**: Creates MD5 hash from text + media file_id for duplicate detection
+- **Auto-Delete**: Keeps first message, deletes subsequent duplicates in target groups
+- **Smart Hashing**: Combines text, caption, and all media types (photo, video, document, audio, voice, sticker)
+- **Cache Management**: 24-hour expiry for message hashes, periodic cleanup every hour
+- **Persistent Storage**: Saves hash cache to `data/duplicate_cache.json` for persistence across restarts
+- **Statistics**: Track total duplicates removed per group via `/stats` command
+- **Admin Commands**: `/start`, `/stats`, `/clear` (clear cache), `/cleanup` (remove old hashes)
+- **Token**: Uses `DUPLICATE_REMOVER_TOKEN` from [core/config.py](core/config.py)
+- **Scope**: Only operates in target groups (from bot_state.json)
+
 ### Data Management
 
 **[core/storage.py](core/storage.py)** - JSON persistence layer:
@@ -150,6 +169,11 @@ pip install -r requirements.txt
 - `payment_requests.json`: Pending/approved/rejected payment requests with screenshot file_id
 - `approved_users.json`: User records with subscription expiry dates
 - `subscriptions.json`: Pricing for 1_month, 3_months, 1_year periods
+
+**Duplicate cache file (Duplicate Remover Bot)**:
+- `duplicate_cache.json`: Message hash storage with format `{group_id: {hash: {first_message_id, timestamp, count}}}`
+- Auto-expires entries older than 24 hours
+- Tracks duplicate count per unique message
 
 ### Services & Utilities
 
@@ -191,6 +215,7 @@ USERBOT_API_HASH = "48e5dad8bef68a54aac5b2ce0702b82c"
 # Bot tokens (from @BotFather)
 ADMIN_BOT_TOKEN = "8250455047:AAH..."
 CUSTOMER_BOT_TOKEN = "8383987517:AAG..."
+DUPLICATE_REMOVER_TOKEN = "8148323755:AAH..."
 
 # Admin access (get IDs from @userinfobot)
 ADMIN_IDS = [7106025530, 5129045986]

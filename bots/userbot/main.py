@@ -310,7 +310,7 @@ async def handle_fast_message(message, chat, matched_keyword, user_identifier=No
             # [YANGI] User profil linki qo'shish
             if message.sender_id:
                 buffer_caption += f'👤 <a href="tg://user?id={message.sender_id}">Profilni ochish</a>'
-
+            print(buffer_caption)
             await client.send_message(
                 entity=buffer_id,
                 message=buffer_caption,
@@ -376,7 +376,7 @@ async def send_to_targets_fast(message, chat, matched_keyword, target_groups, us
             caption += f'👤 <a href="tg://user?id={message.sender_id}">Profilni ochish</a>'
         else:
             caption += "⚠️ User profili topilmadi"
-        
+        print(caption)
         # Target guruhlarga yuborish
         for target in target_groups:
             try:
@@ -476,7 +476,7 @@ async def format_and_send_to_targets(message, chat, matched_keyword, target_grou
         # [YANGI] User profil linki qo'shish - INLINE MENTION
         if message.sender_id:
             caption += f'👤 <a href="tg://user?id={message.sender_id}">Profilni ochish</a>'
-
+        print(caption)
         # Target guruhlarga yuborish
         for target in target_groups:
             try:
@@ -579,6 +579,37 @@ async def setup_raw_handler():
 
             # [FAST] USERNAME yoki TELEFON ni tezkor topish
             user_identifier = None
+
+            # DEBUG: Yuboruvchi ma'lumotlarini ko'rish
+            print("\n" + "="*60)
+            print("MESSAGE SENDER MA'LUMOTLARI:")
+            print("="*60)
+            print(f"sender_id: {message.sender_id}")
+            print(f"from_id: {message.from_id}")
+            print(f"post_author: {message.post_author}")
+            print(f"entities: {message.entities}")
+
+            # Telethon cache'dan sender ma'lumotlarini olish
+            if message.sender_id:
+                try:
+                    cached_sender = client._entity_cache.get(message.sender_id)
+                    if cached_sender:
+                        print(f"\nTELETHON CACHE'DAN:")
+                        print(f"  Type: {type(cached_sender).__name__}")
+                        print(f"  ID: {getattr(cached_sender, 'id', 'N/A')}")
+                        print(f"  First name: {getattr(cached_sender, 'first_name', 'N/A')}")
+                        print(f"  Last name: {getattr(cached_sender, 'last_name', 'N/A')}")
+                        print(f"  Username: {getattr(cached_sender, 'username', 'N/A')}")
+                        print(f"  Phone: {getattr(cached_sender, 'phone', 'N/A')}")
+                        print(f"  Is bot: {getattr(cached_sender, 'bot', 'N/A')}")
+                        print(f"  Is verified: {getattr(cached_sender, 'verified', 'N/A')}")
+                        print(f"  Is premium: {getattr(cached_sender, 'premium', 'N/A')}")
+                    else:
+                        print("\nTELETHON CACHE'DA YO'Q")
+                except Exception as e:
+                    print(f"\nCache xatolik: {e}")
+
+            print("="*60 + "\n")
 
             # 1. Telefon raqami (entities'dan - eng ishonchli)
             if hasattr(message, 'entities') and message.entities:
